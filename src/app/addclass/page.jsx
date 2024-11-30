@@ -1,15 +1,14 @@
-// src/app/add-classroom/page.js
 'use client';
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { PlusCircle, Webhook } from 'lucide-react';
+import Supabase from '@supabase/supabase-js';
 
 export default function AddClassroom() {
   const [name, setName] = useState('');
   const [term, setTerm] = useState('');
   const [subject, setSubject] = useState('');
-  const [description, setDescription] = useState('');
   const router = useRouter();
 
   const handleSubmit = async (e) => {
