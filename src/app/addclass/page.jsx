@@ -3,18 +3,26 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { PlusCircle, Webhook } from 'lucide-react';
-import Supabase from '@supabase/supabase-js';
+import supabase from '@/lib/supabase';
 
-export default function AddClassroom() {
-  const [name, setName] = useState('');
+function AddClassroom() {
+  const [classname, setName] = useState('');
   const [term, setTerm] = useState('');
   const [subject, setSubject] = useState('');
   const router = useRouter();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    router.push('/dashboards');
-  };
+    const { data, error } = await supabase
+      .from('classes')
+      .insert([{ classname, term, subject }]);
+
+      if (error) {
+        console.error('Error creating classroom:', error);
+      } else {
+        router.push('/dashboards');
+      };
+    };
 
   return (
     <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
@@ -33,7 +41,7 @@ export default function AddClassroom() {
             </label>
             <input
               type="text"
-              value={name}
+              value={classname}
               onChange={(e) => setName(e.target.value)}
               className="mt-1 block w-full rounded-lg bg-slate-800 border border-slate-700 
                        px-4 py-2.5 text-white placeholder:text-slate-400 
@@ -90,3 +98,5 @@ export default function AddClassroom() {
     </div>
   );
 }
+
+export default AddClassroom;
