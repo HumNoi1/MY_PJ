@@ -17,12 +17,12 @@ function AddClassroom() {
       .from('classes')
       .insert([{ classname, term, subject }]);
 
-      if (error) {
-        console.error('Error creating classroom:', error);
-      } else {
-        router.push('/dashboards');
-      };
-    };
+    if (error) {
+      console.error('Error creating classroom:', error);
+    } else {
+      router.push('/dashboards');
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
@@ -31,68 +31,59 @@ function AddClassroom() {
           <div className="bg-slate-800 p-3 rounded-lg">
             <Webhook className="w-8 h-8 text-white" />
           </div>
-          <h2 className="mt-6 text-2xl font-bold text-white">Create New Classroom</h2>
+          <h2 className="mt-6 text-3xl font-bold text-white">Add New Classroom</h2>
         </div>
-
-        <form onSubmit={handleSubmit} className="mt-8 space-y-6 bg-slate-800/50 p-6 rounded-lg">
-          <div>
-            <label className="text-sm font-medium text-slate-300">
-              Class Name
-            </label>
-            <input
-              type="text"
-              value={classname}
-              onChange={(e) => setName(e.target.value)}
-              className="mt-1 block w-full rounded-lg bg-slate-800 border border-slate-700 
-                       px-4 py-2.5 text-white placeholder:text-slate-400 
-                       focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              placeholder="Enter classroom name"
-              required
-            />
-            <label className="text-sm font-medium text-slate-300">
-              Term
-            </label>
-            <input
-              type="text"
-              value={term}
-              onChange={(e) => setTerm(e.target.value)}
-              className="mt-1 block w-full rounded-lg bg-slate-800 border border-slate-700 
-                       px-4 py-2.5 text-white placeholder:text-slate-400 
-                       focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              placeholder="Enter term"
-              required
-            />
-            <label className="text-sm font-medium text-slate-300">
-              Subject
-            </label>
-            <input
-              type='text'
-              value-={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              className="mt-1 block w-full rounded-lg bg-slate-800 border border-slate-700
-                        px-4 py-2.5 text-white placeholder:text-slate-400
-                        focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              placeholder="Enter subject"
-              required
-            />
+        
+        <form onSubmit={handleSubmit} className="mt-8 space-y-6">
+          <div className="rounded-md shadow-sm space-y-4">
+            <div>
+              <label htmlFor="classname" className="sr-only">Class Name</label>
+              <input
+                id="classname"
+                name="classname"
+                type="text"
+                required
+                value={classname}
+                onChange={(e) => setName(e.target.value)}
+                className="appearance-none rounded relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                placeholder="Class Name"
+              />
+            </div>
+            <div>
+              <label htmlFor="term" className="sr-only">Term</label>
+              <input
+                id="term"
+                name="term"
+                type="text"
+                required
+                value={term}
+                onChange={(e) => setTerm(e.target.value)}
+                className="appearance-none rounded relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                placeholder="Term"
+              />
+            </div>
+            <div>
+              <label htmlFor="subject" className="sr-only">Subject</label>
+              <input
+                id="subject"
+                name="subject"
+                type="text"
+                required
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                className="appearance-none rounded relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                placeholder="Subject"
+              />
+            </div>
           </div>
 
-          <div className="flex justify-end space-x-4">
-            <button
-              type="button"
-              onClick={() => router.back()}
-              className="px-4 py-2 text-sm text-slate-300 hover:text-white"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="flex items-center px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
-            >
-              <PlusCircle className="w-4 h-4 mr-2" />
-              Create Classroom
-            </button>
-          </div>
+          <button
+            type="submit"
+            className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          >
+            <PlusCircle className="w-5 h-5 mr-2" />
+            Create Classroom
+          </button>
         </form>
       </div>
     </div>

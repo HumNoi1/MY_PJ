@@ -5,11 +5,12 @@ import { useRouter } from 'next/navigation';
 import { Webhook } from 'lucide-react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 
-export default function LoginPage() {
+export default function SignUpPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [fullName, setFullName] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const router = useRouter();
   const supabase = createClientComponentClient();
 
@@ -19,26 +20,35 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      // Sign in with Supabase auth
-      const { data: { user }, error: signInError } = await supabase.auth.signInWithPassword({
+      // Sign up with Supabase auth
+      const { data: { user }, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+        },
       });
 
-      if (signInError) throw signInError;
+      if (signUpError) throw signUpError;
 
-      // Get the user's profile from the Profiles table
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
+      // Create a profile record
+      if (user) {
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .insert([
+            {
+              id: user.id,
+              full_name: fullName,
+              updated_at: new Date().toISOString(),
+            }
+          ]);
 
-      if (profileError) throw profileError;
+        if (profileError) throw profileError;
+      }
 
-      // If successful, redirect to dashboard
-      router.push('/dashboards');
-      router.refresh();
+      // Redirect to login or verification page
+      router.push('/login?message=Check your email to confirm your account');
+      
     } catch (err) {
       setError(err.message);
     } finally {
@@ -46,37 +56,19 @@ export default function LoginPage() {
     }
   };
 
-  const handleForgotPassword = async () => {
-    if (!email) {
-      setError('Please enter your email first');
-      return;
-    }
-
-    try {
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
-      });
-      
-      if (resetError) throw resetError;
-      alert('Password reset instructions sent to your email');
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
   return (
-    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-[#0A1628] flex items-center justify-center p-4">
       <div className="max-w-md w-full space-y-8">
         {/* Logo */}
         <div className="flex flex-col items-center">
-          <div className="bg-slate-800 p-3 rounded-lg">
+          <div className="bg-[#1C2A3F] p-3 rounded-lg">
             <Webhook className="w-8 h-8 text-white" />
           </div>
           <h2 className="mt-6 text-3xl font-bold text-white">
-            Welcome back
+            Create an account
           </h2>
           <p className="mt-2 text-sm text-slate-400">
-            Please enter your details to sign in
+            Please enter your details to sign up
           </p>
         </div>
 
@@ -87,8 +79,26 @@ export default function LoginPage() {
               {error}
             </div>
           )}
-          
+
           <div className="space-y-4">
+            <div>
+              <label htmlFor="fullName" className="text-sm font-medium text-slate-300">
+                Full Name
+              </label>
+              <input
+                id="fullName"
+                name="fullName"
+                type="text"
+                required
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                className="mt-1 block w-full rounded-lg bg-[#1C2A3F] border border-slate-700 
+                         px-4 py-2.5 text-white placeholder:text-slate-400 
+                         focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                placeholder="Enter your full name"
+              />
+            </div>
+
             <div>
               <label htmlFor="email" className="text-sm font-medium text-slate-300">
                 Email
@@ -100,7 +110,7 @@ export default function LoginPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="mt-1 block w-full rounded-lg bg-slate-800 border border-slate-700 
+                className="mt-1 block w-full rounded-lg bg-[#1C2A3F] border border-slate-700 
                          px-4 py-2.5 text-white placeholder:text-slate-400 
                          focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                 placeholder="Enter your email"
@@ -118,35 +128,12 @@ export default function LoginPage() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="mt-1 block w-full rounded-lg bg-slate-800 border border-slate-700 
+                className="mt-1 block w-full rounded-lg bg-[#1C2A3F] border border-slate-700 
                          px-4 py-2.5 text-white placeholder:text-slate-400 
                          focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                placeholder="Enter your password"
+                placeholder="Create a password"
               />
             </div>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              <input
-                id="remember-me"
-                name="remember-me"
-                type="checkbox"
-                className="h-4 w-4 rounded border-slate-700 bg-slate-800 text-blue-500 
-                         focus:ring-blue-500 focus:ring-offset-slate-900"
-              />
-              <label htmlFor="remember-me" className="ml-2 text-sm text-slate-300">
-                Remember me
-              </label>
-            </div>
-
-            <button
-              type="button"
-              onClick={handleForgotPassword}
-              className="text-sm text-blue-500 hover:text-blue-400"
-            >
-              Forgot password?
-            </button>
           </div>
 
           <button
@@ -155,19 +142,19 @@ export default function LoginPage() {
             className="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-lg
                      text-sm font-medium text-white bg-blue-500 hover:bg-blue-600 
                      focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500
-                     focus:ring-offset-slate-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                     focus:ring-offset-[#0A1628] disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? 'Signing in...' : 'Sign in'}
+            {loading ? 'Creating account...' : 'Sign up'}
           </button>
 
           <p className="text-center text-sm text-slate-400">
-            Don't have an account?{' '}
+            Already have an account?{' '}
             <button 
-              type="button" 
-              onClick={() => router.push('/signup')}
+              type="button"
+              onClick={() => router.push('/login')}
               className="text-blue-500 hover:text-blue-400"
             >
-              Sign up
+              Sign in
             </button>
           </p>
         </form>
