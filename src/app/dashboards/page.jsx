@@ -30,10 +30,12 @@ const Dashboards = () => {
       <Nav />
       <div className="flex-grow p-6 bg-slate-800 min-h-screen w-screen">
         <div className="grid grid-cols-12 gap-4">
-
           {/* Add Button */}
           <div className="col-span-3">
-            <Link href="./addclass" className="w-full h-32 rounded-lg border-2 border-slate-600 flex items-center justify-center hover:bg-slate-700 transition-colors">
+            <Link 
+              href="./addclass" 
+              className="w-full h-32 rounded-lg border-2 border-slate-600 flex items-center justify-center hover:bg-slate-700 transition-colors"
+            >
               <Plus className="w-8 h-8 text-slate-400" />
             </Link>
           </div>
@@ -41,12 +43,13 @@ const Dashboards = () => {
           {/* Display Classes */}
           {classes.map((classItem) => (
             <div key={classItem.id} className="col-span-3">
-              <div className="w-full h-32 rounded-lg bg-blue-500 p-4 flex flex-col justify-end">
-                <span className="text-sm text-white">{classItem.name}</span>
-              </div>
+              <Link href={`/class/${classItem.id}`}>
+                <div className="w-full h-32 rounded-lg bg-blue-500 p-4 flex flex-col justify-end hover:bg-blue-600 transition-colors cursor-pointer">
+                  <span className="text-sm text-white">{classItem.name}</span>
+                </div>
+              </Link>
             </div>
           ))}
-
         </div>
       </div>
     </div>

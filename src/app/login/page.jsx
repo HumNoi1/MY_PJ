@@ -135,9 +135,6 @@ export default function LoginPage() {
                 className="h-4 w-4 rounded border-slate-700 bg-slate-800 text-blue-500 
                          focus:ring-blue-500 focus:ring-offset-slate-900"
               />
-              <label htmlFor="remember-me" className="ml-2 text-sm text-slate-300">
-                Remember me
-              </label>
             </div>
 
             <button

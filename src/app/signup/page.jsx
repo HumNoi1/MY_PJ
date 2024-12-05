@@ -20,7 +20,7 @@ export default function SignUpPage() {
     setLoading(true);
 
     try {
-      // Sign up with Supabase auth
+      // Step 1: Sign up with Supabase auth
       const { data: { user }, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
@@ -31,22 +31,37 @@ export default function SignUpPage() {
 
       if (signUpError) throw signUpError;
 
-      // Create a profile record
       if (user) {
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .insert([
-            {
-              id: user.id,
-              full_name: fullName,
-              updated_at: new Date().toISOString(),
-            }
-          ]);
+        // Step 2: Sign in to get the session
+        const { data: { session }, error: signInError } = await supabase.auth.signInWithPassword({
+          email,
+          password
+        });
 
-        if (profileError) throw profileError;
+        if (signInError) throw signInError;
+
+        if (session) {
+          // Step 3: Now insert into users table
+          const { error: userError } = await supabase
+            .from('users')
+            .insert([
+              {
+                id: user.id,
+                email: email,
+                full_name: fullName,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              }
+            ]);
+
+          if (userError) throw userError;
+        }
       }
 
-      // Redirect to login or verification page
+      // Step 4: Sign out after successful registration
+      await supabase.auth.signOut();
+
+      // Redirect to login page with success message
       router.push('/login?message=Check your email to confirm your account');
       
     } catch (err) {
