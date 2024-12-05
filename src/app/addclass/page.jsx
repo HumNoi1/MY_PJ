@@ -65,7 +65,7 @@ const AddClass = () => {
         <div className="max-w-2xl mx-auto">
           <div className="mb-6">
             <Link 
-              href="/dashboard" 
+              href="/dashboards" 
               className="inline-flex items-center text-slate-400 hover:text-slate-300"
             >
               <ArrowLeft className="w-4 h-4 mr-2" />

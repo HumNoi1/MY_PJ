@@ -1,4 +1,4 @@
-// app/class/[id]/page.jsx
+// app/dashboard/class/[id]/page.jsx
 "use client";
 
 import React, { useEffect, useState } from 'react';
@@ -6,8 +6,10 @@ import { ArrowLeft } from 'lucide-react';
 import Nav from '@/components/Nav';
 import Link from 'next/link';
 import supabase from '@/lib/supabase';
+import { useParams } from 'next/navigation';
 
-const ClassDetail = ({ params }) => {
+const ClassDetail = () => {
+  const params = useParams();
   const [classData, setClassData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -15,6 +17,7 @@ const ClassDetail = ({ params }) => {
   useEffect(() => {
     const fetchClassDetail = async () => {
       try {
+        console.log("Fetching class with ID:", params.id);
         const { data, error } = await supabase
           .from('class')
           .select('*')
@@ -22,6 +25,7 @@ const ClassDetail = ({ params }) => {
           .single();
 
         if (error) throw error;
+        console.log("Fetched class data:", data);
         setClassData(data);
       } catch (err) {
         console.error('Error:', err);
@@ -69,18 +73,23 @@ const ClassDetail = ({ params }) => {
 
           <div className="bg-slate-700 rounded-lg p-6">
             <h1 className="text-3xl font-bold text-white mb-8">
-              {classData.name}
+              {classData?.name}
             </h1>
 
             <div className="space-y-6">
               <div>
                 <h2 className="text-lg font-medium text-slate-300 mb-2">Term</h2>
-                <p className="text-white">{classData.term}</p>
+                <p className="text-white">{classData?.term}</p>
               </div>
 
               <div>
                 <h2 className="text-lg font-medium text-slate-300 mb-2">Subject</h2>
-                <p className="text-white">{classData.subject}</p>
+                <p className="text-white">{classData?.subject}</p>
+              </div>
+
+              <div>
+                <h2 className="text-lg font-medium text-slate-300 mb-2">About</h2>
+                <p className="text-white">{classData?.about || 'No description available'}</p>
               </div>
             </div>
           </div>
