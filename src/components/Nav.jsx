@@ -1,7 +1,7 @@
 'use client';
 
 import React from "react";
-import { Home, Moon, LogOut, Webhook, BookMarked } from "lucide-react";
+import { Home, Moon, LogOut, Webhook, BookMarked, BotMessageSquare } from "lucide-react";
 import Link from "next/link";
 
 const Nav = () => {
@@ -17,6 +17,9 @@ const Nav = () => {
       
       <Link href="/dashboards" className="p-2 text-white hover:bg-slate-700 rounded">
         <BookMarked className="w-6 h-6"/>
+      </Link>
+      <Link href="" className="p-2 text-white hover:bg-slate-700 rounded">
+        <BotMessageSquare className="w-6 h-6" />
       </Link>
       
       <div className="flex-grow" />
