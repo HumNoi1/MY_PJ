@@ -264,9 +264,91 @@ const ClassDetail = () => {
 
           {/* Class Info */}
           <div className="bg-slate-700 rounded-lg p-6 mb-6">
-            <h1 className="">
-
+            <h1 className="text-3xl font-bold text-white mb-8">
+              {classData?.name}
             </h1>
+            <div className="grid grid-cols-2 gap-6">
+              <div>
+                <h2 className="text-lg font-medium text-slate-300 mb-2">Term</h2>
+                <p className="text-white">{classData?.term}</p>
+              </div>
+              <div>
+                <h2 className="text-lg font-medium text-slate-300 mb-2">Subject</h2>
+                <p className="text-white">{classData?.subject}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Files Section */}
+          <div className="grid grid-cols-12 gap-6">
+            {/* Uploads Buttons Column} */}
+            <div className="col-span-4">
+              {/* Teacher Upload */}
+              <div className="bg-slate-700 rounded-lg p-6 mb-6">
+                <h2 className="text-xl font-bold text-white mb-4">Teacher Uploads</h2>
+                <label className="block w-full p-3 border-2 border-dashed border-slate-500 rounded-lg hover:border-blue-500 transiton-colors cursor-pointer">
+                  <input
+                    type="file"
+                    onchange={handleTeacherUpload}
+                    disabled={uploadingTeacher}
+                    className="hidden"
+                  ></input>
+                  <div className="flex items-center justify-center text-slate-400 hover:text-blue-500">
+                    <Upload className="w-5 h-5 mr-2" />
+                    {uploadingTeacher ? 'Uploading...' : 'Upload Teacher File'}
+                  </div>
+                </label>
+              </div>
+
+              {/* Student Upload */}
+              <div className="bg-slate-700 rounded-lg p-6">
+                <h2 className="text-xl font-bold text-white mb-4">Student Uploads</h2>
+                <label className="block w-full p-3 border-2 border-dashed border-slate-500 rounded-lg hover:text-blue-500 transition-colors cursor-pointer">
+                  <input
+                    type="file"
+                    onChange={handleStudentUpload}
+                    disabled={uploadingStudent}
+                    className="hidden"
+                  >
+                  </input>
+                  <div className="flex items-center justify-center text-slate-400 hover:text-blue-500">
+                    <Upload className="w-5 h-5 mr-2" />
+                    {uploadingStudent ? 'Uploading...' : 'Upload Student File'}
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            {/* Files Column */}
+            <div className="col-span-8">
+              {/* Teacher Files */}
+              <div className="bg-slate-700 rounded-lg p-6 mb-6">
+                <h2 className="text-xl font-bold text-white mb-4 flex items-center">
+                  <FileText className="w-6 h-6 mr-2" />
+                  Teacher Files
+                </h2>
+                <div>
+                  {teacherFiles.map((file) => (
+                    <div key={file.name} className="flex items-center justify-between p-3 bg-slate-600 rounded-lg">
+                      <a href={getFileUrl(file.name, true)} target="_blank" rel="noopener noreferrer" className="text-white hover:text-blue-400 truncate">
+                        {file.name}
+                      </a>
+                      <button onClick={() => handleDeleteFile(file.name, true)} classsName="text-slate-400 hover:text-red-500 p-1">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                  {teacherFiles.length === 0 && (
+                    <p className="text-slate-400 text-center py-4">No teacher files uploaded yet</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Student Files */}
+              
+
+            </div>
+
           </div>
 
         </div>
