@@ -1,1 +1,9 @@
-langchain
+fastapi
+uvicorn
+langchain-community
+llama-cpp-python
+pypdf
+faiss-cpu
+sentence-transformers
+pydantic
+python-multipart
