@@ -1,16 +1,22 @@
 from fastapi import FastAPI, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from langchain_community.llms import Ollama
+from langchain_community.llms import LlamaCpp
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.embeddings import OllamaEmbeddings
+from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain.chains import RetrievalQA
 from langchain.prompts import PromptTemplate
+from langchain.callbacks.manager import CallbackManager
+from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 import pypdf
 import tempfile
 import os
 from typing import List, Dict
 from pydantic import BaseModel
+
+# Setup paths
+MODELS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models")
+MODEL_PATH = os.path.join(MODELS_DIR, "Llama-3.2-3B-Instruct-Q4_K_M.gguf")
 
 app = FastAPI()
 
@@ -38,24 +44,44 @@ Question: {question}
 
 Answer: """
 
-def initialize_llm(model_name="Llama-3.2-3B-Instruct-Q4_K_M.gguf"):
-    """Initialize Ollama with GPU support"""
+def initialize_llm():
+    """Initialize LlamaCpp with local model"""
     global llm
     try:
-        llm = Ollama(
-            model=model_name,
+        if not os.path.exists(MODEL_PATH):
+            print(f"Model not found at {MODEL_PATH}")
+            return False
+            
+        callback_manager = CallbackManager([StreamingStdOutCallbackHandler()])
+        
+        llm = LlamaCpp(
+            model_path=MODEL_PATH,
             temperature=0.7,
-            num_gpu=1,
-            base_url="http://localhost:11434",
+            max_tokens=2000,
+            n_ctx=2048,          # Context window
+            n_threads=8,         # CPU threads
+            n_gpu_layers=1,     # Use GPU for inference
+            callback_manager=callback_manager,
+            verbose=True,
         )
-        return True
+        
+        # Test the model
+        try:
+            llm("test")
+            print(f"Successfully initialized model at {MODEL_PATH}")
+            return True
+        except Exception as e:
+            print(f"Model test failed: {str(e)}")
+            return False
+            
     except Exception as e:
-        print(f"Error initializing Ollama: {str(e)}")
+        print(f"Error initializing LLM: {str(e)}")
         return False
 
-embeddings = OllamaEmbeddings(
-    model="mistral",
-    base_url="http://localhost:11434"
+# Initialize embeddings - using HuggingFace for better compatibility
+embeddings = HuggingFaceEmbeddings(
+    model_name="sentence-transformers/all-MiniLM-L6-v2",
+    model_kwargs={'device': 'cuda'}  # Use GPU if available, falls back to CPU
 )
 
 class QueryRequest(BaseModel):
@@ -88,7 +114,7 @@ def process_pdf(file_path: str) -> List[str]:
 async def startup_event():
     """Initialize LLM on startup."""
     if not initialize_llm():
-        print("Warning: Ollama not initialized. Make sure Ollama is running.")
+        print("Warning: LLM not initialized. Check if model exists in the models directory.")
 
 @app.get("/status/{filename}")
 async def get_processing_status(filename: str):
@@ -101,7 +127,7 @@ async def get_processing_status(filename: str):
 @app.post("/upload")
 async def upload_pdf(file: UploadFile):
     if not llm:
-        raise HTTPException(status_code=503, detail="Ollama not initialized")
+        raise HTTPException(status_code=503, detail="LLM not initialized")
     
     try:
         # Save uploaded file temporarily
@@ -126,7 +152,7 @@ async def upload_pdf(file: UploadFile):
 @app.post("/query")
 async def query_document(request: QueryRequest):
     if not llm:
-        raise HTTPException(status_code=503, detail="Ollama not initialized")
+        raise HTTPException(status_code=503, detail="LLM not initialized")
     
     if request.filename not in vector_stores:
         raise HTTPException(

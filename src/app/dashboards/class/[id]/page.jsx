@@ -16,7 +16,7 @@ const ClassDetail = () => {
   const [studentFiles, setStudentFiles] = useState([]);
   const [uploadingTeacher, setUploadingTeacher] = useState(false);
   const [uploadingStudent, setUploadingStudent] = useState(false);
-  const [customPrompt, setCustomPrompt] = useState(false);
+  const [customPrompt, setCustomPrompt] = useState('');
   const [showPromptSettings, setShowPromptSettings] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isDocumentsReady, setIsDocumentsReady] = useState(false);
@@ -163,7 +163,11 @@ const ClassDetail = () => {
       setIsProcessing(true);
       setIsDocumentsReady(false);
       setError(null);
-
+  
+      // Check if document is already processed
+      const statusResponse = await fetch(`http://localhost:8000/status/${file.name}`);
+      const statusData = await statusResponse.json();
+  
       if (!statusData.is_processed) {
         // Download file from Supabase
         const { data, error } = await supabase.storage
@@ -187,19 +191,19 @@ const ClassDetail = () => {
         }
       }
       
-      setIsDocumentReady(true);
+      setIsDocumentsReady(true);
     } catch (err) {
       console.error('Error processing file:', err);
       setError(err.message || 'Failed to process file for RAG');
       setSelectedFile(null);
-      setIsDocumentReady(false);
+      setIsDocumentsReady(false);
     } finally {
       setIsProcessing(false);
     }
   };
 
   const handleAskQuestion = async () => {
-    if (!selectedFile || !question.trim() || !isDocumentReady) {
+    if (!selectedFile || !question.trim() || !isDocumentsReady) {
       setError('Please select a file, wait for processing to complete, and enter a question');
       return;
     }
@@ -289,7 +293,7 @@ const ClassDetail = () => {
                 <label className="block w-full p-3 border-2 border-dashed border-slate-500 rounded-lg hover:border-blue-500 transiton-colors cursor-pointer">
                   <input
                     type="file"
-                    onchange={handleTeacherUpload}
+                    onChange={handleTeacherUpload}
                     disabled={uploadingTeacher}
                     className="hidden"
                   ></input>
@@ -333,7 +337,7 @@ const ClassDetail = () => {
                       <a href={getFileUrl(file.name, true)} target="_blank" rel="noopener noreferrer" className="text-white hover:text-blue-400 truncate">
                         {file.name}
                       </a>
-                      <button onClick={() => handleDeleteFile(file.name, true)} classsName="text-slate-400 hover:text-red-500 p-1">
+                      <button onClick={() => handleDeleteFile(file.name, true)} className="text-slate-400 hover:text-red-500 p-1">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
@@ -345,10 +349,130 @@ const ClassDetail = () => {
               </div>
 
               {/* Student Files */}
-              
-
+              <div className="bg-slate-700 rounded-lg p-6">
+                <h2 className="text-xl font-bold text-white mb-4 flex items-center">
+                  <FileText className="w-5 h-5 mr-2" />
+                  Student Files
+                </h2>
+                <div className="space-y-2">
+                  {studentFiles.map((file) => (
+                    <div key={file.name} className="flex items-center justify-between p-3 bg-slate-600 rounded-lg">
+                      <a href={getFileUrl(file.name, false)} target="_blank" rel="noopener noreferrer" className="text-white hover:text-blue-400 truncate">
+                        {file.name}
+                      </a>
+                      <button onClick={() => handleDeleteFile(file.name, false)} className="text-slate-400 hover:text-red-500 p-1">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                  {studentFiles.length === 0 && (
+                    <p className="text-slate-400 text-center py-4">No student files uploaded yet</p>
+                  )}
+                </div>
+              </div>
             </div>
-
+            <div className="bg-slate-700 rounded-lg p-6 mb-6">
+              <h2 className="text-xl font-bold text-white mb-4 flex items-center">
+                <FileText className="w-5 h-5 mr-2" />
+                Teacher Files
+              </h2>
+              <div className="space-y-2">
+                {teacherFiles.map((file) => (
+                  <div key={file.name} className="flex items-center justify-between p-3 bg-slate-600 rounded-lg">
+                    <div className="flex items-center space-x-3 flex-grow">
+                      <a href={getFileUrl(file.name, true)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-white hover:text-blue-400 truncate"
+                      >
+                        {file.name}
+                      </a>
+                      {file.name.toLowerCase().endsWith('.pdf') && (
+                        <button
+                        onClick={() => handleFileSelect(file)}
+                        className={`px-3 py-1 rounded ${
+                          selectedFile?.name === file.name
+                            ? 'bg-blue-500 text-white'
+                            : 'bg-slate-500 text-slate-200 hover:bg-blue-500'
+                          }`}
+                          >
+                            <MessageCircle className="w-4 h-4" />
+                        </button>
+                      )}
+                      <div>
+                        <button onClick={() => handleDeleteFile(file.name, true)}
+                        className="text-slate-400 hover:text-red-500 p-1">
+                          <Trash2 className="w-4 h-4"/>
+                        </button>
+                      </div>
+                      {teacherFiles.length === 0 && (
+                        <p className="text-slate-400 text-center py-4">No teacher files uploaded yet</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          
+          {/* RAG Section */}
+          {selectedFile && (
+            <div className="mt-6 p-4 bg-slate-600 rounded-lg">
+              <h3 className="text-lg font-medium text-white mb-3 flex items-center justify-between">
+                <span>Ask question about {selectedFile.name}</span>
+                {isProcessing && (
+                  <span className=" text-sm text-blue-400">Processing document...</span>
+                )}
+              </h3>
+              <div className="space-y-4">
+                <textarea
+                  value={question}
+                  onChange={(e) => setQuestion(e.target.value)}
+                  disabled={!isDocumentsReady || isProcessing}
+                  className="w-full p-3 rounded bg-slate-700 text-white border border-slate-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+                  placeholder={
+                    isProcessing
+                      ? 'Processing document...'
+                      : isDocumentsReady
+                        ? 'Ask a question about this document...'
+                        : 'Please wait for document processing to complete...'
+                  }
+                  rows="3"
+                />
+                <button
+                  onClick={handleAskQuestion}
+                  disabled={isQuerying || !question.trim() || !isDocumentsReady || isProcessing}
+                  className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-slate-500"
+                >
+                  {isQuerying 
+                    ? 'Getting Answer.'
+                    : isProcessing
+                      ? 'Processing Document...'
+                      : 'Ask Question'}
+                </button>
+                {answer && (
+                  <div className="p-4 bg-slate-700 rounded">
+                    <h4 className="text-sm font-medium text-slate-300 mb-2">Answer</h4>
+                    <p className="text-white whitespace-pre-wrap">{answer}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              Custom Prompt Template (Optional)
+            </label>
+            <textarea
+              value={customPrompt}
+              onChange={(e) => setCustomPrompt(e.target.value)}
+              className="w-full p-3 rounded bg-slate-700 text-white border border-slate-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              placeholder='Enter custom prompt template... Use {context} and {question} as placeholders'
+              rows='4'
+             />
+             <p className="text-sm text-slate-400 mt-1">
+                Leave empty to use default prompt. Use {'{context}'} and {'{question}'} as placeholders.
+             </p>
           </div>
 
         </div>
