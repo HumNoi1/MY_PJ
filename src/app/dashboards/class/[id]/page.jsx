@@ -68,70 +68,177 @@ const ClassDetail = () => {
   const handleTeacherUpload = async (event) => {
     try {
       setUploadingTeacher(true);
+      setError(null);
       const file = event.target.files[0];
+      
+      if (file.type !== 'application/pdf') {
+        throw new Error('Only PDF files are supported');
+      }
+      
       const filePath = `${params.id}/teacher/${file.name}`;
-
-      const { error } = await supabase.storage
+  
+      // 1. Upload to Storage
+      const { error: uploadError } = await supabase.storage
         .from('class-files')
         .upload(filePath, file);
-
-      if (error) throw error;
-
-      const { data } = await supabase
-        .storage
+  
+      if (uploadError) throw uploadError;
+  
+      // 2. Process PDF and get embeddings
+      const formData = new FormData();
+      formData.append('file', file);
+  
+      const processResponse = await fetch('http://localhost:8000/process-pdf', {
+        method: 'POST',
+        body: formData,
+      });
+  
+      if (!processResponse.ok) {
+        await supabase.storage
+          .from('class-files')
+          .remove([filePath]);
+          
+        const errorData = await processResponse.json();
+        throw new Error(errorData.detail || 'Failed to process PDF');
+      }
+  
+      const { text, embedding } = await processResponse.json();
+  
+      // 3. Store in Vector Store with embedding
+      const { error: vectorError } = await supabase.rpc(
+        'insert_document',
+        {
+          content: text,
+          metadata: JSON.stringify({
+            class_id: params.id,
+            file_name: file.name,
+            file_type: 'teacher',
+            file_path: filePath,
+            upload_date: new Date().toISOString()
+          }),
+          embedding: embedding
+        }
+      );
+  
+      if (vectorError) {
+        await supabase.storage
+          .from('class-files')
+          .remove([filePath]);
+        throw vectorError;
+      }
+  
+      // 4. Refresh file list
+      const { data } = await supabase.storage
         .from('class-files')
         .list(`${params.id}/teacher`);
-
+  
       setTeacherFiles(data || []);
+  
     } catch (err) {
       console.error('Upload error:', err);
-      setError('Failed to upload file');
+      setError(err.message || 'Failed to upload file');
+      event.target.value = '';
     } finally {
       setUploadingTeacher(false);
     }
   };
-
+  
   const handleStudentUpload = async (event) => {
     try {
       setUploadingStudent(true);
       const file = event.target.files[0];
       const filePath = `${params.id}/student/${file.name}`;
-
-      const { error } = await supabase.storage
+  
+      // 1. Upload to Storage
+      const { error: uploadError } = await supabase.storage
         .from('class-files')
         .upload(filePath, file);
-
-      if (error) throw error;
-
-      const { data } = await supabase
-        .storage
+  
+      if (uploadError) throw uploadError;
+  
+      // 2. Process PDF if it's a PDF file
+      if (file.type === 'application/pdf') {
+        // Create form data for processing
+        const formData = new FormData();
+        formData.append('file', file);
+  
+        // Call backend to process PDF and get text content
+        const processResponse = await fetch('http://localhost:8000/process-pdf', {
+          method: 'POST',
+          body: formData,
+        });
+  
+        if (!processResponse.ok) {
+          throw new Error('Failed to process PDF');
+        }
+  
+        const { text } = await processResponse.json();
+  
+        // 3. Store in Vector Store using Supabase function
+        const { error: vectorError } = await supabase.rpc(
+          'insert_document',
+          {
+            content: text,
+            metadata: JSON.stringify({
+              class_id: params.id,
+              file_name: file.name,
+              file_type: 'student',
+              file_path: filePath,
+              upload_date: new Date().toISOString()
+            })
+          }
+        );
+  
+        if (vectorError) {
+          // If vector store fails, delete from storage
+          await supabase.storage
+            .from('class-files')
+            .remove([filePath]);
+          throw vectorError;
+        }
+      }
+  
+      // 4. Refresh file list
+      const { data } = await supabase.storage
         .from('class-files')
         .list(`${params.id}/student`);
-
+  
       setStudentFiles(data || []);
+  
     } catch (err) {
       console.error('Upload error:', err);
-      setError('Failed to upload file');
+      setError('Failed to upload file: ' + err.message);
     } finally {
       setUploadingStudent(false);
     }
   };
-
+  
   const handleDeleteFile = async (path, isTeacher) => {
     try {
       const filePath = `${params.id}/${isTeacher ? 'teacher' : 'student'}/${path}`;
       
-      const { error } = await supabase.storage
+      // 1. Delete from Storage
+      const { error: storageError } = await supabase.storage
         .from('class-files')
         .remove([filePath]);
-
-      if (error) throw error;
-
-      const { data } = await supabase
-        .storage
+  
+      if (storageError) throw storageError;
+  
+      // 2. Delete from Vector Store
+      const { error: vectorError } = await supabase.rpc(
+        'delete_document',
+        {
+          file_path: filePath
+        }
+      );
+  
+      if (vectorError) throw vectorError;
+  
+      // 3. Refresh file list
+      const { data } = await supabase.storage
         .from('class-files')
         .list(`${params.id}/${isTeacher ? 'teacher' : 'student'}`);
-
+  
       if (isTeacher) {
         setTeacherFiles(data || []);
         if (selectedFile?.name === path) {
@@ -144,7 +251,7 @@ const ClassDetail = () => {
       }
     } catch (err) {
       console.error('Delete error:', err);
-      setError('Failed to delete file');
+      setError('Failed to delete file: ' + err.message);
     }
   };
 
