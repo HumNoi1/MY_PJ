@@ -18,7 +18,7 @@ const Nav = () => {
       <Link href="/dashboards" className="p-2 text-white hover:bg-slate-700 rounded">
         <BookMarked className="w-6 h-6"/>
       </Link>
-      <Link href="" className="p-2 text-white hover:bg-slate-700 rounded">
+      <Link href="/dashboards/TeacherDashboards" className="p-2 text-white hover:bg-slate-700 rounded">
         <BotMessageSquare className="w-6 h-6" />
       </Link>
       
