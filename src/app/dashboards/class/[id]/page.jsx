@@ -16,49 +16,22 @@ const ClassDetail = () => {
   const [studentFiles, setStudentFiles] = useState([]);
   const [uploadingTeacher, setUploadingTeacher] = useState(false);
   const [uploadingStudent, setUploadingStudent] = useState(false);
-  const [customPrompt, setCustomPrompt] = useState('');
-  const [showPromptSettings, setShowPromptSettings] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [isDocumentsReady, setIsDocumentsReady] = useState(false);
-
-  // Add states for RAG functionality
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [question, setQuestion] = useState('');
-  const [answer, setAnswer] = useState('');
-  const [isQuerying, setIsQuerying] = useState(false);
 
   // Fetch function
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const { data: classDetails, error: classError } = await supabase
-          .from('class')
+        // Fetch class data
+        const { data: ClassDetail, error: classError } = await supabase
+          .from('classes')
           .select('*')
           .eq('id', params.id)
           .single();
-
         if (classError) throw classError;
-        setClassData(classDetails);
+        setClassData(ClassDetail);
 
-        const { data: teacherData } = await supabase
-          .storage
-          .from('class-files')
-          .list(`${params.id}/teacher`);
+        // Fetch teacher files
 
-        setTeacherFiles(teacherData || []);
-
-        const { data: studentData } = await supabase
-          .storage
-          .from('class-files')
-          .list(`${params.id}/student`);
-
-        setStudentFiles(studentData || []);
-
-      } catch (err) {
-        console.error('Error:', err);
-        setError('Failed to load data');
-      } finally {
-        setLoading(false);
       }
     };
 
