@@ -31,10 +31,32 @@ const ClassDetail = () => {
         setClassData(ClassDetail);
 
         // Fetch teacher files
+        const { data: teacherData, error: teacherError } = await supabase
+          .from('teacher_resources')
+          .select('*')
+          .eq('class_id', params.id)
+          .order('created_at', { ascending: false });
 
+        if (teacherError) throw teacherError;
+        setTeacherResources(teacherData || []);
+
+      // Fetch student files
+      const { data: studentData, error: studentError } = await supabase
+        .from('student_submissions')
+        .select('*')
+        .eq('class_id', params.id)
+        .order('created_at', { ascending: false });
+
+      if (studentError) throw studentError;
+      setStudentSubmissions(studentData || []);
+      }
+      catch (err) {
+        console.error('Error:', err);
+        setError('Failed to load data')
+      } finally {
+        setLoading(false);
       }
     };
-
     fetchData();
   }, [params.id]);
 
@@ -43,74 +65,52 @@ const ClassDetail = () => {
       setUploadingTeacher(true);
       setError(null);
       const file = event.target.files[0];
-      
+
       if (file.type !== 'application/pdf') {
-        throw new Error('Only PDF files are supported');
+        throw new Error('Only PDF files are allowed');
       }
-      
-      const filePath = `${params.id}/teacher/${file.name}`;
-  
+
+      const filePath = `${params.id}/${file.name}`;
+
       // 1. Upload to Storage
-      const { error: uploadError } = await supabase.storage
-        .from('class-files')
+      const { data: storageData, error : uploaderError } = await supabase
+        .from('teacher_resources')
         .upload(filePath, file);
-  
-      if (uploadError) throw uploadError;
-  
-      // 2. Process PDF and get embeddings
-      const formData = new FormData();
-      formData.append('file', file);
-  
-      const processResponse = await fetch('http://localhost:8000/process-pdf', {
-        method: 'POST',
-        body: formData,
-      });
-  
-      if (!processResponse.ok) {
+
+      if (uploaderError) throw uploaderError;
+
+      // 2. create record on teacher_resources
+      const { data: errordbError } = await supabase
+        .from('teacher_resources')
+        .insert({
+          class_id: params.id,
+          file_name: file.name,
+          file_path: filePath,
+        })
+        .select()
+        .single();
+
+      if (dbError) {
+        // Rollback storage upload if DB insert fasils
         await supabase.storage
-          .from('class-files')
+          .from('teacher-resources')
           .remove([filePath]);
-          
-        const errorData = await processResponse.json();
-        throw new Error(errorData.detail || 'Failed to process PDF');
+        throw dbError;
       }
-  
-      const { text, embedding } = await processResponse.json();
-  
-      // 3. Store in Vector Store with embedding
-      const { error: vectorError } = await supabase.rpc(
-        'insert_document',
-        {
-          content: text,
-          metadata: JSON.stringify({
-            class_id: params.id,
-            file_name: file.name,
-            file_type: 'teacher',
-            file_path: filePath,
-            upload_date: new Date().toISOString()
-          }),
-          embedding: embedding
-        }
-      );
-  
-      if (vectorError) {
-        await supabase.storage
-          .from('class-files')
-          .remove([filePath]);
-        throw vectorError;
-      }
-  
-      // 4. Refresh file list
-      const { data } = await supabase.storage
-        .from('class-files')
-        .list(`${params.id}/teacher`);
-  
-      setTeacherFiles(data || []);
-  
-    } catch (err) {
+
+      // 3. Refresh file list
+      const { data: resources } = await supabase
+        .from('teacher_resources')
+        .select('*')
+        .eq('class_id', params.id)
+        .order('created_at', { ascending: false });
+      
+      setTeacherResources(resources || []);
+    }
+
+    catch (err) {
       console.error('Upload error:', err);
-      setError(err.message || 'Failed to upload file');
-      event.target.value = '';
+      setError('Failed to upload file: ' + err.message);
     } finally {
       setUploadingTeacher(false);
     }
@@ -120,64 +120,47 @@ const ClassDetail = () => {
     try {
       setUploadingStudent(true);
       const file = event.target.files[0];
-      const filePath = `${params.id}/student/${file.name}`;
-  
-      // 1. Upload to Storage
-      const { error: uploadError } = await supabase.storage
-        .from('class-files')
-        .upload(filePath, file);
-  
-      if (uploadError) throw uploadError;
-  
-      // 2. Process PDF if it's a PDF file
-      if (file.type === 'application/pdf') {
-        // Create form data for processing
-        const formData = new FormData();
-        formData.append('file', file);
-  
-        // Call backend to process PDF and get text content
-        const processResponse = await fetch('http://localhost:8000/process-pdf', {
-          method: 'POST',
-          body: formData,
-        });
-  
-        if (!processResponse.ok) {
-          throw new Error('Failed to process PDF');
-        }
-  
-        const { text } = await processResponse.json();
-  
-        // 3. Store in Vector Store using Supabase function
-        const { error: vectorError } = await supabase.rpc(
-          'insert_document',
-          {
-            content: text,
-            metadata: JSON.stringify({
-              class_id: params.id,
-              file_name: file.name,
-              file_type: 'student',
-              file_path: filePath,
-              upload_date: new Date().toISOString()
-            })
-          }
-        );
-  
-        if (vectorError) {
-          // If vector store fails, delete from storage
-          await supabase.storage
-            .from('class-files')
-            .remove([filePath]);
-          throw vectorError;
-        }
+
+      if (file.type !== 'application/pdf') {
+        throw new Error('Only PDF files are allowed');
       }
-  
-      // 4. Refresh file list
-      const { data } = await supabase.storage
-        .from('class-files')
-        .list(`${params.id}/student`);
-  
-      setStudentFiles(data || []);
-  
+
+      const filePath = `${params.id}/${file.name}`;
+
+      // 1. Upload to Storage
+      const { data: storageData, error : uploaderError } = await supabase.storage
+        .from('student-submissions')
+        .upload(filePath, file);
+      
+      if (uploaderError) throw uploaderError;
+
+      // 2. create record on student_submissions
+      const { data, error: dbError } = await supabase
+        .from('student_submissions')
+        .insert({
+          class_id: params.id,
+          file_name: file.name,
+          file_path: filePath,
+        })
+        .select()
+        .single();
+      
+      if (dbError) {
+        await supabase.storage
+          .from('student-submissions')
+          .remove([filePath]);
+        throw dbError;
+      }
+
+      // 3. Refresh file list
+      const { data: submissions } = await supabase
+        .from('student_submissions')
+        .select('*')
+        .eq('class_id', params.id)
+        .order('created_at', { ascending: false });
+      
+      setStudentSubmissions(submissions || []);
+
     } catch (err) {
       console.error('Upload error:', err);
       setError('Failed to upload file: ' + err.message);
@@ -185,7 +168,7 @@ const ClassDetail = () => {
       setUploadingStudent(false);
     }
   };
-  
+
   const handleDeleteFile = async (path, isTeacher) => {
     try {
       const filePath = `${params.id}/${isTeacher ? 'teacher' : 'student'}/${path}`;

@@ -26,7 +26,7 @@ const AddClass = () => {
       console.log('Submitting data:', formData);
       
       const { data, error: insertError } = await supabase
-        .from('class')
+        .from('classes')
         .insert([{
           name: formData.name,
           term: formData.term,

@@ -240,3 +240,28 @@ async def grade_student_answer(
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+    
+@app.post("/grade-answer")
+async def grade_answer(
+  student_file: UploadFile,
+  answer_key_id: str,
+  grading_criteria: Dict[str, int]  
+):
+    if not grader:
+        raise HTTPException(status_code=503, detail="Grading system not initialized")
+    
+    try:
+        with tempfile.NamedTemporaryFile(delete=False) as temp_file:
+            content = await student_file.read()
+            temp_file.write(content)
+            temp_path = temp_file.name
+    
+        result = await grader.grade_student_answer(
+            temp_path,
+            answer_key_id,
+            grading_criteria
+        )
+        os.unlink(temp_path)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
