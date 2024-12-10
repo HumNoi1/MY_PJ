@@ -470,69 +470,6 @@ const ClassDetail = () => {
           </div>
         </div>
 
-        {/* RAG Section */}
-        {selectedFile && (
-          <section className="bg-slate-800 rounded-xl p-6 shadow-lg">
-            <h3 className="text-xl font-bold text-white mb-6 flex items-center justify-between">
-              <span>Ask about {selectedFile.name}</span>
-              {isProcessing && (
-                <span className="text-sm text-blue-400">Processing document...</span>
-              )}
-            </h3>
-            <div className="space-y-6">
-              <textarea
-                value={question}
-                onChange={(e) => setQuestion(e.target.value)}
-                disabled={!isDocumentsReady || isProcessing}
-                className="w-full p-4 rounded-lg bg-slate-700 text-white border border-slate-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:opacity-50 transition-colors"
-                placeholder={
-                  isProcessing
-                    ? 'Processing document...'
-                    : isDocumentsReady
-                      ? 'Ask a question about this document...'
-                      : 'Please wait for document processing to complete...'
-                }
-                rows="4"
-              />
-              <button
-                onClick={handleAskQuestion}
-                disabled={isQuerying || !question.trim() || !isDocumentsReady || isProcessing}
-                className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-slate-600 disabled:cursor-not-allowed transition-colors"
-              >
-                {isQuerying 
-                  ? 'Getting Answer...'
-                  : isProcessing
-                    ? 'Processing Document...'
-                    : 'Ask Question'}
-              </button>
-              {answer && (
-                <div className="p-6 bg-slate-700 rounded-lg">
-                  <h4 className="text-sm font-medium text-slate-300 mb-3">Answer</h4>
-                  <p className="text-white whitespace-pre-wrap">{answer}</p>
-                </div>
-              )}
-            </div>
-          </section>
-        )}
-
-        {/* Custom Prompt Section */}
-        <section className="bg-slate-800 rounded-xl p-6 shadow-lg">
-          <label className="block">
-            <span className="text-sm font-medium text-slate-300 mb-2 block">
-              Custom Prompt Template (Optional)
-            </span>
-            <textarea
-              value={customPrompt}
-              onChange={(e) => setCustomPrompt(e.target.value)}
-              className="w-full p-4 rounded-lg bg-slate-700 text-white border border-slate-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
-              placeholder='Enter custom prompt template... Use {context} and {question} as placeholders'
-              rows="4"
-            />
-            <p className="text-sm text-slate-400 mt-2">
-              Leave empty to use default prompt. Use {'{context}'} and {'{question}'} as placeholders.
-            </p>
-          </label>
-        </section>
       </div>
     </main>
   </div>
