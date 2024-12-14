@@ -65,52 +65,56 @@ const ClassDetail = () => {
       setUploadingTeacher(true);
       setError(null);
       const file = event.target.files[0];
-
+      
       if (file.type !== 'application/pdf') {
-        throw new Error('Only PDF files are allowed');
+        throw new Error('Only PDF files are supported');
       }
-
+      
       const filePath = `${params.id}/${file.name}`;
-
-      // 1. Upload to Storage
-      const { data: storageData, error : uploaderError } = await supabase
-        .from('teacher_resources')
-        .upload(filePath, file);
-
-      if (uploaderError) throw uploaderError;
-
-      // 2. create record on teacher_resources
-      const { data: errordbError } = await supabase
+  
+      // 1. อัพโหลดไฟล์ไปที่ Storage
+      const { data: storageData, error: uploadError } = await supabase
+        .storage
+        .from('teacher-resources') // bucket name
+        .upload(`${params.id}/${file.name}`, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
+  
+      if (uploadError) throw uploadError;
+  
+      // 2. สร้าง record ใน teacher_resources table
+      const { data, error: dbError } = await supabase
         .from('teacher_resources')
         .insert({
           class_id: params.id,
           file_name: file.name,
-          file_path: filePath,
+          file_path: storageData.path // ใช้ path ที่ได้จาก storage
         })
         .select()
         .single();
-
+  
       if (dbError) {
-        // Rollback storage upload if DB insert fasils
+        // ถ้าเพิ่มข้อมูลในฐานข้อมูลไม่สำเร็จ ให้ลบไฟล์ออกจาก storage
         await supabase.storage
           .from('teacher-resources')
-          .remove([filePath]);
+          .remove([`${params.id}/${file.name}`]);
         throw dbError;
       }
-
-      // 3. Refresh file list
+  
+      // 3. รีเฟรชรายการไฟล์
       const { data: resources } = await supabase
         .from('teacher_resources')
         .select('*')
         .eq('class_id', params.id)
         .order('created_at', { ascending: false });
-      
+  
       setTeacherResources(resources || []);
-    }
-
-    catch (err) {
+  
+    } catch (err) {
       console.error('Upload error:', err);
-      setError('Failed to upload file: ' + err.message);
+      setError(err.message || 'Failed to upload file');
+      event.target.value = ''; // รีเซ็ต input file
     } finally {
       setUploadingTeacher(false);
     }
@@ -119,51 +123,55 @@ const ClassDetail = () => {
   const handleStudentUpload = async (event) => {
     try {
       setUploadingStudent(true);
+      setError(null);
       const file = event.target.files[0];
-
-      if (file.type !== 'application/pdf') {
-        throw new Error('Only PDF files are allowed');
-      }
-
-      const filePath = `${params.id}/${file.name}`;
-
-      // 1. Upload to Storage
-      const { data: storageData, error : uploaderError } = await supabase.storage
-        .from('student-submissions')
-        .upload(filePath, file);
       
-      if (uploaderError) throw uploaderError;
-
-      // 2. create record on student_submissions
+      if (file.type !== 'application/pdf') {
+        throw new Error('Only PDF files are supported');
+      }
+  
+      // 1. อัพโหลดไฟล์ไปที่ Storage
+      const { data: storageData, error: uploadError } = await supabase
+        .storage
+        .from('student-submissions') // bucket name
+        .upload(`${params.id}/${file.name}`, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
+  
+      if (uploadError) throw uploadError;
+  
+      // 2. สร้าง record ใน student_submissions table
       const { data, error: dbError } = await supabase
         .from('student_submissions')
         .insert({
           class_id: params.id,
           file_name: file.name,
-          file_path: filePath,
+          file_path: storageData.path
         })
         .select()
         .single();
-      
+  
       if (dbError) {
         await supabase.storage
           .from('student-submissions')
-          .remove([filePath]);
+          .remove([`${params.id}/${file.name}`]);
         throw dbError;
       }
-
-      // 3. Refresh file list
+  
+      // 3. รีเฟรชรายการไฟล์
       const { data: submissions } = await supabase
         .from('student_submissions')
         .select('*')
         .eq('class_id', params.id)
         .order('created_at', { ascending: false });
-      
+  
       setStudentSubmissions(submissions || []);
-
+  
     } catch (err) {
       console.error('Upload error:', err);
       setError('Failed to upload file: ' + err.message);
+      event.target.value = '';
     } finally {
       setUploadingStudent(false);
     }

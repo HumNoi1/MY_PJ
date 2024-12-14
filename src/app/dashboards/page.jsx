@@ -12,7 +12,7 @@ const Dashboards = () => {
   useEffect(() => {
     const fetchClasses = async () => {
       const { data, error } = await supabase
-        .from("class")
+        .from("classes")
         .select("*");
 
       if (error) {
