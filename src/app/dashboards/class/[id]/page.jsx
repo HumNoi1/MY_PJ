@@ -22,99 +22,82 @@ const ClassDetail = () => {
     const fetchData = async () => {
       try {
         // Fetch class data
-        const { data: ClassDetail, error: classError } = await supabase
+        const { data: classDetails, error: classError } = await supabase
           .from('classes')
           .select('*')
           .eq('id', params.id)
           .single();
-        if (classError) throw classError;
-        setClassData(ClassDetail);
 
-        // Fetch teacher files
+        if (classError) throw classError;
+        setClassData(classDetails);
+
+        // ดึงข้อมูลไฟล์ที่อัพโหลดแล้ว
         const { data: teacherData, error: teacherError } = await supabase
-          .from('teacher_resources')
-          .select('*')
-          .eq('class_id', params.id)
-          .order('created_at', { ascending: false });
+          .storage
+          .from('teacher-resources')
+          .list(params.id); // list files in class folder
 
         if (teacherError) throw teacherError;
-        setTeacherResources(teacherData || []);
+        setTeacherFiles(teacherData || []);
 
-      // Fetch student files
-      const { data: studentData, error: studentError } = await supabase
-        .from('student_submissions')
-        .select('*')
-        .eq('class_id', params.id)
-        .order('created_at', { ascending: false });
+        const { data: studentData, error: studentError } = await supabase
+          .storage
+          .from('student-submissions')
+          .list(params.id);
 
-      if (studentError) throw studentError;
-      setStudentSubmissions(studentData || []);
-      }
-      catch (err) {
+        if (studentError) throw studentError;
+        setStudentFiles(studentData || []);
+
+      } catch (err) {
         console.error('Error:', err);
-        setError('Failed to load data')
+        setError('Failed to load data');
       } finally {
         setLoading(false);
       }
     };
+
     fetchData();
   }, [params.id]);
 
   const handleTeacherUpload = async (event) => {
     try {
       setUploadingTeacher(true);
-      setError(null);
       const file = event.target.files[0];
       
       if (file.type !== 'application/pdf') {
-        throw new Error('Only PDF files are supported');
+        throw new Error('รองรับเฉพาะไฟล์ PDF เท่านั้น');
       }
       
-      const filePath = `${params.id}/${file.name}`;
-  
       // 1. อัพโหลดไฟล์ไปที่ Storage
       const { data: storageData, error: uploadError } = await supabase
         .storage
-        .from('teacher-resources') // bucket name
-        .upload(`${params.id}/${file.name}`, file, {
-          cacheControl: '3600',
-          upsert: false
-        });
+        .from('teacher-resources')
+        .upload(`${params.id}/${file.name}`, file);
   
       if (uploadError) throw uploadError;
   
-      // 2. สร้าง record ใน teacher_resources table
-      const { data, error: dbError } = await supabase
+      // 2. บันทึกข้อมูลลงตาราง
+      const { error: dbError } = await supabase
         .from('teacher_resources')
         .insert({
           class_id: params.id,
           file_name: file.name,
-          file_path: storageData.path // ใช้ path ที่ได้จาก storage
-        })
-        .select()
-        .single();
+          file_path: storageData.path
+        });
   
-      if (dbError) {
-        // ถ้าเพิ่มข้อมูลในฐานข้อมูลไม่สำเร็จ ให้ลบไฟล์ออกจาก storage
-        await supabase.storage
-          .from('teacher-resources')
-          .remove([`${params.id}/${file.name}`]);
-        throw dbError;
-      }
+      if (dbError) throw dbError;
   
       // 3. รีเฟรชรายการไฟล์
-      const { data: resources } = await supabase
+      const { data: files } = await supabase
         .from('teacher_resources')
         .select('*')
-        .eq('class_id', params.id)
-        .order('created_at', { ascending: false });
-  
-      setTeacherResources(resources || []);
+        .eq('class_id', params.id);
+      
+      setTeacherFiles(files || []);
   
     } catch (err) {
       console.error('Upload error:', err);
-      setError(err.message || 'Failed to upload file');
-      event.target.value = ''; // รีเซ็ต input file
+      setError('เกิดข้อผิดพลาดในการอัปโหลดไฟล์');
     } finally {
       setUploadingTeacher(false);
     }
@@ -123,96 +106,84 @@ const ClassDetail = () => {
   const handleStudentUpload = async (event) => {
     try {
       setUploadingStudent(true);
-      setError(null);
       const file = event.target.files[0];
       
       if (file.type !== 'application/pdf') {
-        throw new Error('Only PDF files are supported');
+        throw new Error('รองรับเฉพาะไฟล์ PDF เท่านั้น');
       }
   
-      // 1. อัพโหลดไฟล์ไปที่ Storage
+      // 1. อัพโหลดไฟล์
       const { data: storageData, error: uploadError } = await supabase
         .storage
-        .from('student-submissions') // bucket name
-        .upload(`${params.id}/${file.name}`, file, {
-          cacheControl: '3600',
-          upsert: false
-        });
+        .from('student-submissions')
+        .upload(`${params.id}/${file.name}`, file);
   
       if (uploadError) throw uploadError;
   
-      // 2. สร้าง record ใน student_submissions table
-      const { data, error: dbError } = await supabase
+      // 2. บันทึกข้อมูล
+      const { error: dbError } = await supabase
         .from('student_submissions')
         .insert({
           class_id: params.id,
           file_name: file.name,
           file_path: storageData.path
-        })
-        .select()
-        .single();
+        });
   
-      if (dbError) {
-        await supabase.storage
-          .from('student-submissions')
-          .remove([`${params.id}/${file.name}`]);
-        throw dbError;
-      }
+      if (dbError) throw dbError;
   
-      // 3. รีเฟรชรายการไฟล์
-      const { data: submissions } = await supabase
+      // 3. รีเฟรชรายการ
+      const { data: files } = await supabase
         .from('student_submissions')
         .select('*')
-        .eq('class_id', params.id)
-        .order('created_at', { ascending: false });
-  
-      setStudentSubmissions(submissions || []);
+        .eq('class_id', params.id);
+      
+      setStudentFiles(files || []);
   
     } catch (err) {
       console.error('Upload error:', err);
-      setError('Failed to upload file: ' + err.message);
-      event.target.value = '';
+      setError('เกิดข้อผิดพลาดในการอัปโหลดไฟล์');
     } finally {
       setUploadingStudent(false);
     }
   };
 
-  const handleDeleteFile = async (path, isTeacher) => {
+  const handleDeleteFile = async (filename, isTeacher) => {
     try {
-      const filePath = `${params.id}/${isTeacher ? 'teacher' : 'student'}/${path}`;
-      
-      // 1. Delete from Storage
+      const bucketName = isTeacher ? 'teacher-resources' : 'student-submissions';
+      const tableName = isTeacher ? 'teacher_resources' : 'student_submissions';
+      const filePath = `${params.id}/${filename}`;
+  
+      // 1. ลบไฟล์จาก Storage
       const { error: storageError } = await supabase.storage
-        .from('class-files')
+        .from(bucketName)
         .remove([filePath]);
   
       if (storageError) throw storageError;
   
-      // 2. Delete from Vector Store
-      const { error: vectorError } = await supabase.rpc(
-        'delete_document',
-        {
-          file_path: filePath
-        }
-      );
+      // 2. ลบข้อมูลจากตาราง
+      const { error: dbError } = await supabase
+        .from(tableName)
+        .delete()
+        .eq('file_path', filePath);
   
-      if (vectorError) throw vectorError;
+      if (dbError) throw dbError;
   
-      // 3. Refresh file list
-      const { data } = await supabase.storage
-        .from('class-files')
-        .list(`${params.id}/${isTeacher ? 'teacher' : 'student'}`);
+      // 3. รีเฟรชรายการไฟล์
+      const { data: files } = await supabase.storage
+        .from(bucketName)
+        .list(params.id);
   
       if (isTeacher) {
-        setTeacherFiles(data || []);
-        if (selectedFile?.name === path) {
+        setTeacherFiles(files || []);
+        if (selectedFile?.name === filename) {
           setSelectedFile(null);
           setAnswer('');
           setQuestion('');
         }
       } else {
-        setStudentFiles(data || []);
+        setStudentFiles(files || []);
       }
+  
     } catch (err) {
       console.error('Delete error:', err);
       setError('Failed to delete file: ' + err.message);
@@ -408,31 +379,31 @@ const ClassDetail = () => {
               </h2>
               <div className="space-y-3">
                 {teacherFiles.map((file) => (
-                  <div key={file.name} className="flex items-center justify-between p-4 bg-slate-700/50 rounded-lg hover:bg-slate-700 transition-colors">
+                  <div key={file?.id || file?.name} className="flex items-center justify-between p-4 bg-slate-700/50 rounded-lg hover:bg-slate-700 transition-colors">
                     <div className="flex items-center space-x-4 flex-1 min-w-0">
-                      <a 
-                        href={getFileUrl(file.name, true)}
+                      <a
+                        href={getFileUrl(file?.name, true)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-white hover:text-blue-400 truncate"
                       >
-                        {file.name}
+                        {file?.name}
                       </a>
-                      {file.name.toLowerCase().endsWith('.pdf') && (
+                      {file?.name && file.name.toLowerCase().endsWith('.pdf') && (
                         <button
                           onClick={() => handleFileSelect(file)}
-                          className={`p-2 rounded-lg transition-colors ${
+                          className={`p-2 text-slate-400 hover:text-blue-400 transition-colors &{
                             selectedFile?.name === file.name
                               ? 'bg-blue-500 text-white'
-                              : 'bg-slate-600 text-slate-300 hover:bg-blue-500/80 hover:text-white'
-                          }`}
+                              : 'bg-slate-700' 
+                            }`}
                         >
                           <MessageCircle className="w-4 h-4" />
                         </button>
                       )}
                     </div>
-                    <button 
-                      onClick={() => handleDeleteFile(file.name, true)}
+                    <button
+                      onClick={() => handleDeleteFile(file?.name, true)}
                       className="p-2 text-slate-400 hover:text-red-400 transition-colors"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -452,25 +423,25 @@ const ClassDetail = () => {
                 Student Files
               </h2>
               <div className="space-y-3">
-                {studentFiles.map((file) => (
-                  <div key={file.name} className="flex items-center justify-between p-4 bg-slate-700/50 rounded-lg hover:bg-slate-700 transition-colors">
-                    <a 
-                      href={getFileUrl(file.name, false)}
+                {studentFiles?.map((file) => (
+                  <div key={file?.id || file?.name} className="flex items-center justify-between p-4 bg-slate-700/50 rounded-lg hover:bg-slate-700 transition-colors">
+                    <a
+                      href={getFileUrl(file?.name, false)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-white hover:text-blue-400 truncate"
                     >
-                      {file.name}
+                      {file?.name}
                     </a>
-                    <button 
-                      onClick={() => handleDeleteFile(file.name, false)}
+                    <button
+                      onClick={() => handleDeleteFile(file?.name, false)}
                       className="p-2 text-slate-400 hover:text-red-400 transition-colors"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 ))}
-                {studentFiles.length === 0 && (
+                {!studentFiles?.length && (
                   <p className="text-slate-400 text-center py-8">No student files uploaded yet</p>
                 )}
               </div>
