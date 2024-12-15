@@ -16,6 +16,15 @@ const ClassDetail = () => {
   const [studentFiles, setStudentFiles] = useState([]);
   const [uploadingTeacher, setUploadingTeacher] = useState(false);
   const [uploadingStudent, setUploadingStudent] = useState(false);
+  
+  // Function for RAG and Chat
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [question, setQuestion] = useState('');
+  const [answer, setAnswer] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [isDocumentsReady, setIsDocumentsReady] = useState(false);
+  const [isQuerying, setIsQuerying] = useState(false);
+  const [customPrompt, setCustomPrompt] = useState('');
 
   // Fetch function
   useEffect(() => {
@@ -62,6 +71,7 @@ const ClassDetail = () => {
   const handleTeacherUpload = async (event) => {
     try {
       setUploadingTeacher(true);
+      setError(null);
       const file = event.target.files[0];
       
       if (file.type !== 'application/pdf') {
@@ -69,35 +79,67 @@ const ClassDetail = () => {
       }
       
       // 1. อัพโหลดไฟล์ไปที่ Storage
+      const filePath = `${params.id}/${file.name}`;
       const { data: storageData, error: uploadError } = await supabase
         .storage
         .from('teacher-resources')
-        .upload(`${params.id}/${file.name}`, file);
+        .upload(filePath, file);
   
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error('Storage upload error:', uploadError);
+        throw new Error('ไม่สามารถอัพโหลดไฟล์ไปยัง Storage: ' + uploadError.message);
+      }
   
-      // 2. บันทึกข้อมูลลงตาราง
+      // 2. ส่งไฟล์ไป Process ที่ FastAPI
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('class_id', params.id);
+  
+      const processResponse = await fetch('http://localhost:8000/process-pdf', {
+        method: 'POST',
+        body: formData,
+      });
+  
+      if (!processResponse.ok) {
+        // ลบไฟล์จาก storage ถ้า process ไม่สำเร็จ
+        await supabase.storage
+          .from('teacher-resources')
+          .remove([filePath]);
+  
+        const errorData = await processResponse.json();
+        throw new Error(errorData.detail || 'ไม่สามารถประมวลผลไฟล์ได้');
+      }
+  
+      // 3. บันทึกข้อมูล
       const { error: dbError } = await supabase
         .from('teacher_resources')
         .insert({
           class_id: params.id,
           file_name: file.name,
-          file_path: storageData.path
+          file_path: filePath,
+          processed: true
         });
   
-      if (dbError) throw dbError;
+      if (dbError) {
+        console.error('Database insert error:', dbError);
+        throw new Error('ไม่สามารถบันทึกข้อมูลลงฐานข้อมูล: ' + dbError.message);
+      }
   
-      // 3. รีเฟรชรายการไฟล์
-      const { data: files } = await supabase
-        .from('teacher_resources')
-        .select('*')
-        .eq('class_id', params.id);
+      // 4. รีเฟรชรายการ
+      const { data: files, error: listError } = await supabase.storage
+        .from('teacher-resources')
+        .list(params.id);
       
+      if (listError) {
+        console.error('List files error:', listError);
+        throw new Error('ไม่สามารถโหลดรายการไฟล์: ' + listError.message);
+      }
+  
       setTeacherFiles(files || []);
   
     } catch (err) {
       console.error('Upload error:', err);
-      setError('เกิดข้อผิดพลาดในการอัปโหลดไฟล์');
+      setError(err.message || 'เกิดข้อผิดพลาดในการอัปโหลดไฟล์');
     } finally {
       setUploadingTeacher(false);
     }
@@ -191,9 +233,10 @@ const ClassDetail = () => {
   };
 
   const getFileUrl = (path, isTeacher) => {
+    const bucketName = isTeacher ? 'teacher-resources' : 'student-submissions';
     const { data } = supabase.storage
-      .from('class-files')
-      .getPublicUrl(`${params.id}/${isTeacher ? 'teacher' : 'student'}/${path}`);
+      .from(bucketName)
+      .getPublicUrl(`${params.id}/${path}`);
     return data.publicUrl;
   };
 
@@ -245,15 +288,18 @@ const ClassDetail = () => {
   };
 
   const handleAskQuestion = async () => {
-    if (!selectedFile || !question.trim() || !isDocumentsReady) {
-      setError('Please select a file, wait for processing to complete, and enter a question');
-      return;
-    }
-  
     try {
+      // ตรวจสอบเงื่อนไข
+      if (!selectedFile || !question.trim() || !isDocumentsReady) {
+        setError('กรุณาเลือกไฟล์และใส่คำถาม');
+        return;
+      }
+  
+      // เริ่มการค้นหา
       setIsQuerying(true);
       setError(null);
       
+      // ส่งคำขอไปยัง FastAPI
       const response = await fetch('http://localhost:8000/query', {
         method: 'POST',
         headers: {
@@ -261,24 +307,35 @@ const ClassDetail = () => {
         },
         body: JSON.stringify({ 
           question: question.trim(),
-          custom_prompt: customPrompt.trim(),
-          filename: selectedFile.name
+          class_id: params.id,
+          custom_prompt: customPrompt.trim() || undefined
         }),
       });
   
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to get answer');
+        throw new Error(errorData.detail || 'ไม่สามารถค้นหาคำตอบได้');
       }
   
+      // รับคำตอบและแสดงผล
       const data = await response.json();
       setAnswer(data.response);
+      
     } catch (err) {
-      console.error('Error getting answer:', err);
-      setError(err.message || 'Failed to get answer');
+      console.error('Error querying:', err);
+      setError(err.message || 'เกิดข้อผิดพลาดในการค้นหาคำตอบ');
     } finally {
       setIsQuerying(false);
     }
+
+    console.log('Sending request:', { 
+      question: question.trim(),
+      class_id: params.id,
+      custom_prompt: customPrompt.trim() || undefined
+    });
+    
+    // หลังจากได้รับคำตอบ
+    console.log('Response:', data);
   };
 
   if (loading) return (
@@ -447,6 +504,73 @@ const ClassDetail = () => {
               </div>
             </section>
           </div>
+          
+          {/* RAG and Chat */}
+          {selectedFile && (
+            <section className="lg:col-span-12 bg-slate-800 rounded-xl p-6 shadow-lg">
+              <h3 className="text-xl font-bold text-white mb-6 flex items-center justify-between">
+                <span>ถามเกี่ยวกับ {selectedFile.name}</span>
+                {isProcessing && (
+                  <span className="text-sm text-blue-400">Processing...</span>
+                )}
+              </h3>
+              
+              {/*custom prompt*/}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Custom Prompt (optional)
+                </label>
+                <textarea
+                  value={customPrompt}
+                  onChange={(e) => setCustomPrompt(e.target.value)}
+                  className="w-full p-3 rounded-lg bg-slate-700 text-white border border-slate-600 focus:border-blue-500"
+                  placeholder='Enter a custom prompt for the model (optional)'
+                  rows="2"
+                />
+              </div>
+
+              {/* Question Input */}
+              <div className="space-y-4">
+                <textarea
+                  value={question}
+                  onChange={(e) => setQuestion(e.target.value)}
+                  disabled={!isDocumentsReady || isProcessing}
+                  className="w-full p-4 rounded-lg bg-slate-700 text-white border border-slate-600 focus:border-blue-500 disabled:opacity-50"
+                  placeholder={
+                    isProcessing
+                      ? 'Please wait for processing to complete...'
+                      : !isDocumentsReady
+                        ? 'Enter your question here...'
+                        : 'Please wait for processing to complete...'
+                  }
+                  rows="4"
+                />
+              </div>
+
+              {/* Ask Question Button */}
+              <button
+                onClick={handleAskQuestion}
+                disabled={isQuerying || !question.trim() || !isDocumentsReady || isProcessing} 
+                className="mt-4 px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                >
+                  {isQuerying
+                    ? 'กำลังค้นหาคำตอบ...'
+                    : isProcessing
+                      ? 'กำลังประมวลผลเอกสาร...'
+                      : 'ถามคำถาม'}
+              </button>
+
+              {/* Ask Question Button */}
+              {answer && (
+                <div className="mt-6 p-6 bg-slate-700 rounded-lg">
+                  <h4 className="teat-sm font-medium text-slate-300 mb-3">คำตอบ</h4>
+                  <div className="text-white whitespace-pre-wrap">{answer}</div>
+                </div>
+              )}
+
+            </section>
+          )}
+
         </div>
 
       </div>
