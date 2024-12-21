@@ -75,71 +75,36 @@ const ClassDetail = () => {
       const file = event.target.files[0];
       
       if (file.type !== 'application/pdf') {
-        throw new Error('รองรับเฉพาะไฟล์ PDF เท่านั้น');
+        throw new Error('Only PDF files are supported');
       }
       
-      // 1. อัพโหลดไฟล์ไปที่ Storage
-      const filePath = `${params.id}/${file.name}`;
-      const { data: storageData, error: uploadError } = await supabase
-        .storage
-        .from('teacher-resources')
-        .upload(filePath, file);
-  
-      if (uploadError) {
-        console.error('Storage upload error:', uploadError);
-        throw new Error('ไม่สามารถอัพโหลดไฟล์ไปยัง Storage: ' + uploadError.message);
-      }
-  
-      // 2. ส่งไฟล์ไป Process ที่ FastAPI
+      // สร้าง FormData
       const formData = new FormData();
       formData.append('file', file);
       formData.append('class_id', params.id);
-  
+    
+      // ส่งไฟล์ไปประมวลผลที่ FastAPI
       const processResponse = await fetch('http://localhost:8000/process-pdf', {
         method: 'POST',
         body: formData,
       });
-  
+    
       if (!processResponse.ok) {
-        // ลบไฟล์จาก storage ถ้า process ไม่สำเร็จ
-        await supabase.storage
-          .from('teacher-resources')
-          .remove([filePath]);
-  
         const errorData = await processResponse.json();
-        throw new Error(errorData.detail || 'ไม่สามารถประมวลผลไฟล์ได้');
+        throw new Error(errorData.detail || 'Failed to process PDF');
       }
-  
-      // 3. บันทึกข้อมูล
-      const { error: dbError } = await supabase
-        .from('teacher_resources')
-        .insert({
-          class_id: params.id,
-          file_name: file.name,
-          file_path: filePath,
-          processed: true
-        });
-  
-      if (dbError) {
-        console.error('Database insert error:', dbError);
-        throw new Error('ไม่สามารถบันทึกข้อมูลลงฐานข้อมูล: ' + dbError.message);
-      }
-  
-      // 4. รีเฟรชรายการ
-      const { data: files, error: listError } = await supabase.storage
-        .from('teacher-resources')
-        .list(params.id);
-      
-      if (listError) {
-        console.error('List files error:', listError);
-        throw new Error('ไม่สามารถโหลดรายการไฟล์: ' + listError.message);
-      }
-  
-      setTeacherFiles(files || []);
-  
+    
+      // รีเฟรชรายการไฟล์
+      const { data } = await supabase.storage
+        .from('class-files')
+        .list(`${params.id}/teacher`);
+    
+      setTeacherFiles(data || []);
+    
     } catch (err) {
       console.error('Upload error:', err);
-      setError(err.message || 'เกิดข้อผิดพลาดในการอัปโหลดไฟล์');
+      setError(err.message || 'Failed to upload file');
+      event.target.value = '';
     } finally {
       setUploadingTeacher(false);
     }
@@ -189,43 +154,36 @@ const ClassDetail = () => {
     }
   };
 
-  const handleDeleteFile = async (filename, isTeacher) => {
+  const handleDeleteFile = async (path, isTeacher) => {
     try {
-      const bucketName = isTeacher ? 'teacher-resources' : 'student-submissions';
-      const tableName = isTeacher ? 'teacher_resources' : 'student_submissions';
-      const filePath = `${params.id}/${filename}`;
+      const filePath = `${params.id}/${isTeacher ? 'teacher' : 'student'}/${path}`;
+      
+      // เรียก API เพื่อลบทั้งไฟล์และ vectors
+      const deleteResponse = await fetch(
+        `http://localhost:8000/document/${params.id}/${path}`,
+        { method: 'DELETE' }
+      );
   
-      // 1. ลบไฟล์จาก Storage
-      const { error: storageError } = await supabase.storage
-        .from(bucketName)
-        .remove([filePath]);
+      if (!deleteResponse.ok) {
+        throw new Error('Failed to delete file');
+      }
   
-      if (storageError) throw storageError;
-  
-      // 2. ลบข้อมูลจากตาราง
-      const { error: dbError } = await supabase
-        .from(tableName)
-        .delete()
-        .eq('file_path', filePath);
-  
-      if (dbError) throw dbError;
-  
-      // 3. รีเฟรชรายการไฟล์
-      const { data: files } = await supabase.storage
-        .from(bucketName)
-        .list(params.id);
+      // รีเฟรชรายการไฟล์
+      const { data } = await supabase.storage
+        .from('class-files')
+        .list(`${params.id}/${isTeacher ? 'teacher' : 'student'}`);
   
       if (isTeacher) {
-        setTeacherFiles(files || []);
-        if (selectedFile?.name === filename) {
+        setTeacherFiles(data || []);
+        if (selectedFile?.name === path) {
           setSelectedFile(null);
           setAnswer('');
           setQuestion('');
         }
       } else {
-        setStudentFiles(files || []);
+        setStudentFiles(data || []);
       }
-  
+      
     } catch (err) {
       console.error('Delete error:', err);
       setError('Failed to delete file: ' + err.message);
@@ -288,18 +246,15 @@ const ClassDetail = () => {
   };
 
   const handleAskQuestion = async () => {
-    try {
-      // ตรวจสอบเงื่อนไข
-      if (!selectedFile || !question.trim() || !isDocumentsReady) {
-        setError('กรุณาเลือกไฟล์และใส่คำถาม');
-        return;
-      }
+    if (!selectedFile || !question.trim()) {
+      setError('Please select a file and enter a question');
+      return;
+    }
   
-      // เริ่มการค้นหา
+    try {
       setIsQuerying(true);
       setError(null);
       
-      // ส่งคำขอไปยัง FastAPI
       const response = await fetch('http://localhost:8000/query', {
         method: 'POST',
         headers: {
@@ -307,35 +262,25 @@ const ClassDetail = () => {
         },
         body: JSON.stringify({ 
           question: question.trim(),
+          custom_prompt: customPrompt.trim(),
           class_id: params.id,
-          custom_prompt: customPrompt.trim() || undefined
+          file_name: selectedFile.name
         }),
       });
   
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.detail || 'ไม่สามารถค้นหาคำตอบได้');
+        throw new Error(errorData.detail || 'Failed to get answer');
       }
   
-      // รับคำตอบและแสดงผล
       const data = await response.json();
       setAnswer(data.response);
-      
     } catch (err) {
-      console.error('Error querying:', err);
-      setError(err.message || 'เกิดข้อผิดพลาดในการค้นหาคำตอบ');
+      console.error('Error getting answer:', err);
+      setError(err.message || 'Failed to get answer');
     } finally {
       setIsQuerying(false);
     }
-
-    console.log('Sending request:', { 
-      question: question.trim(),
-      class_id: params.id,
-      custom_prompt: customPrompt.trim() || undefined
-    });
-    
-    // หลังจากได้รับคำตอบ
-    console.log('Response:', data);
   };
 
   if (loading) return (

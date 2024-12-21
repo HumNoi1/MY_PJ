@@ -11,3 +11,4 @@ torch
 Milvus
 pymilvus
 python-dotenv
+pinecone
